@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>世界生物图鉴 · MVP 原型</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#1f6b46">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="生物图鉴">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="bar">
+      <span class="logo">🌿 世界生物图鉴 <small>MVP 原型</small></span>
+      <nav>
+        <a href="#/" data-nav="home">发现</a>
+        <a href="#/browse" data-nav="browse">分类</a>
+        <a href="#/topics" data-nav="topics">专题</a>
+        <a href="#/search" data-nav="search">检索</a>
+        <a href="#/fav" data-nav="fav">收藏</a>
+      </nav>
+      <span class="spacer"></span>
+      <button class="icon-btn" id="themeBtn">🌙 暗色</button>
+      <button class="icon-btn" id="fsBtn" title="全屏 / 退出全屏">⛶ 全屏</button>
+    </div>
+  </header>
+  <main class="wrap">
+    <div id="app"></div>
+    <footer>
+      世界生物图鉴 · MVP 原型（纯静态 HTML / 离线可用 / 可单文件分发）。本原型内容为示意，正式上线前须以权威源（Catalogue of Life / IUCN / 中国生物志库）核对；图像为手绘示意图或 AI 生成示意图（非实拍），均已标注。
+    </footer>
+  </main>
+  <script src="data/species.js"></script>
+  <script src="assets/js/search_index.js"></script>
+  <script src="assets/js/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('./sw.js').catch(function (e) {
+          console.log('SW 注册失败（本地 file:// 或非 HTTPS 环境属正常）：', e);
+        });
+      });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+{
+  "name": "世界生物图鉴",
+  "short_name": "生物图鉴",
+  "description": "世界动植物阅读平台 — 收录动物、植物与微生物，以文字与图像形态说明的离线可阅读应用。",
+  "lang": "zh-CN",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f6f8f5",
+  "theme_color": "#1f6b46",
+  "categories": ["education", "reference", "nature"],
+  "icons": [
+    {
+      "src": "assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
