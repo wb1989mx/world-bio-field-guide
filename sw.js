@@ -2,7 +2,7 @@
  * 离线优先缓存：预缓存应用外壳(app shell)，静态资源运行时 cache-first。
  * 部署说明见 README-PWA.md。
  */
-const CACHE = 'bio-atlas-v1';
+const CACHE = 'bio-atlas-v2'; // 升级缓存版本：修改静态资源后自增，强制 iPad 等客户端刷新离线缓存
 const APP_SHELL = [
   './index.html',
   './manifest.webmanifest',
