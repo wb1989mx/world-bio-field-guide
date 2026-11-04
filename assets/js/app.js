@@ -113,8 +113,10 @@
       (list.length ? gridHTML(list) : '<div class="empty">暂无</div>');
   }
 
-  // ---------- audio narration (Web Speech API) ----------
-  var audioState = { utter: null, playing: false, paused: false, speciesId: null };
+  // ---------- audio narration (Web Speech API, iPad/iOS 优化) ----------
+  // iOS/Safari 已知坑：长文本会被降速/卡顿/中途改音调；原生 pause/resume 不稳。
+  // 对策：① 按句切分短句逐句朗读；② 用「取消+重建朗读」替代 pause/resume；③ 优先选 zh-CN 声线。
+  var audioGen = 0; // 每次进入新物种自增，使旧物种的回调失效，避免串台
   var zhVoices = [];
   function loadVoices() {
     if (!("speechSynthesis" in window)) return;
@@ -127,10 +129,25 @@
   function pickZhVoice() {
     if (!("speechSynthesis" in window)) return null;
     if (!zhVoices.length) { try { zhVoices = window.speechSynthesis.getVoices() || []; } catch (e) {} }
+    if (!zhVoices.length) return null;
+    // 优先精确匹配 zh-CN，再退而求其次取 zh 前缀（避免误选其他方言导致音调怪异）
     for (var i = 0; i < zhVoices.length; i++) {
-      if (zhVoices[i].lang && zhVoices[i].lang.toLowerCase().indexOf("zh") === 0) return zhVoices[i];
+      if (zhVoices[i].lang === "zh-CN") return zhVoices[i];
+    }
+    for (var j = 0; j < zhVoices.length; j++) {
+      if (zhVoices[j].lang && zhVoices[j].lang.toLowerCase().indexOf("zh") === 0) return zhVoices[j];
     }
     return null;
+  }
+  function splitChunks(text) {
+    // 按句末标点切分，规避 iOS 长文本被截断/降速/卡顿（不用 lookbehind，兼容旧版 iPadOS）
+    var out = [], buf = "", seps = "。！？!?；;\n";
+    for (var k = 0; k < text.length; k++) {
+      buf += text[k];
+      if (seps.indexOf(text[k]) !== -1) { var t = buf.trim(); if (t) out.push(t); buf = ""; }
+    }
+    if (buf.trim()) out.push(buf.trim());
+    return out.length ? out : [text];
   }
   function buildNarration(s) {
     var parts = [];
@@ -157,27 +174,57 @@
     if (!player || !btn || !status) return;
     if (!("speechSynthesis" in window)) { player.style.display = "none"; return; }
     try { window.speechSynthesis.cancel(); } catch (e) {}
-    audioState = { utter: null, playing: false, paused: false, speciesId: s.id };
-    btn.onclick = function () {
+    var myGen = ++audioGen;
+    var st = { chunks: splitChunks(buildNarration(s)), index: 0, playing: false, paused: false, suppress: false };
+
+    function setStatus(t) { if (status) status.textContent = t; }
+    function setBtn(b, on) { if (btn) { btn.textContent = b; if (on) btn.classList.add("playing"); else btn.classList.remove("playing"); } }
+
+    function speakChunk(i) {
+      if (audioGen !== myGen) return;
+      if (i >= st.chunks.length) {
+        st.playing = false; st.paused = false; setBtn("🔊", false); setStatus("播放完毕，可重新播放"); return;
+      }
+      st.index = i;
       var synth = window.speechSynthesis;
-      if (audioState.playing && !audioState.paused) {
-        try { synth.pause(); } catch (e) {}
-        audioState.paused = true; btn.textContent = "▶"; btn.classList.remove("playing"); status.textContent = "已暂停"; return;
-      }
-      if (audioState.paused) {
-        try { synth.resume(); } catch (e) {}
-        audioState.paused = false; audioState.playing = true;
-        btn.textContent = "⏸"; btn.classList.add("playing"); status.textContent = "朗读中…"; return;
-      }
-      var u = new SpeechSynthesisUtterance(buildNarration(s));
+      var u = new SpeechSynthesisUtterance(st.chunks[i]);
       var v = pickZhVoice();
-      if (v) u.voice = v;
-      u.lang = "zh-CN"; u.rate = 1.0; u.pitch = 1.0;
-      u.onstart = function () { audioState.playing = true; audioState.paused = false; btn.textContent = "⏸"; btn.classList.add("playing"); status.textContent = "朗读中…"; };
-      u.onend = function () { audioState.playing = false; audioState.paused = false; btn.textContent = "🔊"; btn.classList.remove("playing"); status.textContent = "播放完毕，可重新播放"; };
-      u.onerror = function () { audioState.playing = false; audioState.paused = false; btn.textContent = "🔊"; btn.classList.remove("playing"); status.textContent = "当前环境暂不支持朗读"; };
-      audioState.utter = u;
-      try { synth.cancel(); synth.speak(u); } catch (e) { status.textContent = "当前环境暂不支持朗读"; }
+      if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = "zh-CN"; } // 显式同步 voice/lang，避免 iOS 音调漂移
+      u.rate = 1.0; u.pitch = 1.0;
+      u.onstart = function () { if (audioGen !== myGen) return; st.playing = true; st.paused = false; setBtn("⏸", true); setStatus("朗读中…"); };
+      u.onend = function () {
+        if (audioGen !== myGen) return;
+        if (st.suppress) { st.suppress = false; return; } // 是被「取消」触发的，不继续往下读
+        speakChunk(i + 1);
+      };
+      u.onerror = function () {
+        if (audioGen !== myGen) return;
+        if (st.suppress) { st.suppress = false; return; }
+        st.playing = false; st.paused = false; setBtn("🔊", false); setStatus("当前环境暂不支持朗读");
+      };
+      try { synth.speak(u); } catch (e) {}
+    }
+
+    btn.onclick = function () {
+      if (audioGen !== myGen) return;
+      var synth = window.speechSynthesis;
+      // 暂停：直接取消当前朗读并记住位置（iOS 的 pause() 不稳，不用）
+      if (st.playing && !st.paused) {
+        st.suppress = true;
+        try { synth.cancel(); } catch (e) {}
+        st.paused = true; st.playing = false; setBtn("▶", false); setStatus("已暂停");
+        setTimeout(function () { if (audioGen !== myGen) return; if (st.suppress) st.suppress = false; }, 250);
+        return;
+      }
+      // 继续：从当前句重建朗读（规避 iOS resume 失效）
+      if (st.paused) {
+        st.paused = false; st.playing = true;
+        speakChunk(st.index);
+        return;
+      }
+      // 首次播放：iOS 需极短延迟，规避首句被吞/音调异常
+      st.playing = true;
+      setTimeout(function () { speakChunk(0); }, 60);
     };
   }
 
